@@ -1,0 +1,24 @@
+# Local execution data and raw recordings
+output/
+rec/
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.jpg
+*.jpeg
+*.png
+*.tif
+*.tiff
+*.jsonl
+# Python/IDE
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.idea/
+.vscode/
+# Local secrets/config overrides
+.env
+.env.*
+config.local.json
