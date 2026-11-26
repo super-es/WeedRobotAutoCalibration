@@ -11,6 +11,7 @@ import cv2
 import numpy as np
 from processor import rgb_process
 from auto_calibration import DEFAULTS, recommend, video_samples
+from auto_balance import AutoBrightness
 
 ROOT=pathlib.Path(__file__).resolve().parent
 
@@ -37,7 +38,8 @@ class Tuner:
         # processing 섹션만 편집하므로 녹화/API 설정은 유지됩니다.
         self.cfg=self.config.setdefault('processing',{})
         self.samples=[];self.original=None;self.processed=None;self.path=None
-        master.title('Weed Robot - RGB 영상 보정 실험실 v3.3')
+        self.auto_controller=AutoBrightness()
+        master.title('Weed Robot - RGB 자동 밝기 균형 v3.4')
         master.geometry('1300x950')
         main=ttk.Frame(master,padding=12);main.pack(fill='both',expand=True)
         top=ttk.Frame(main);top.pack(fill='x')
@@ -52,7 +54,12 @@ class Tuner:
         control=ttk.Frame(pane,padding=8);pane.add(control,weight=1)
         display=ttk.Frame(pane,padding=8);pane.add(display,weight=3)
         self.variables={};self.labels={};self.entries={}
-        self.check(control,'enabled','전처리 적용',True)
+        self.check(control,'enabled','수동 전처리 적용',True)
+        # 자동 밝기 균형: 기본 ON / OFF 버튼. 수동 전처리와 독립적으로 동작합니다.
+        self.check(control,'auto_balance_enabled','자동 밝기 균형 ON/OFF',True)
+        self.scale(control,'auto_target_luma','목표 밝기(L)',80,175,1)
+        self.scale(control,'auto_strength','자동 보정 강도',0.0,1.0,0.05)
+        self.scale(control,'auto_smoothing','영상 변화 완충',0.0,0.995,0.005)
         self.check(control,'white_balance','자동 화이트밸런스',False)
         self.check(control,'clahe','CLAHE 대비 보정',False)
         self.scale(control,'clahe_clip','CLAHE 강도',0.1,6.0,0.1)
@@ -105,18 +112,21 @@ class Tuner:
     # 선택한 이미지를 읽어 보정 결과를 갱신합니다.
     def load(self,path):
         try:
-            self.original=read_image(path);self.samples=[self.original];self.path=path;self.auto()
+            self.original=read_image(path);self.samples=[self.original];self.path=path;self.auto_controller.reset();self.auto()
         except Exception as e:messagebox.showerror('파일 오류',str(e))
     def open_video(self):
         path=filedialog.askopenfilename(filetypes=[('Video','*.mp4 *.avi *.mov *.mkv')])
         if not path:return
         try:
-            self.samples=video_samples(path);self.original=self.samples[len(self.samples)//2];self.path=path;self.auto()
+            self.samples=video_samples(path);self.original=self.samples[len(self.samples)//2];self.path=path;self.auto_controller.reset();self.auto()
         except Exception as e:messagebox.showerror('영상 오류',str(e))
     def auto(self):
         if not self.samples:return
         values,stats=recommend(self.samples)
-        for key,var in self.variables.items():var.set(values[key])
+        for key,var in self.variables.items():
+            # 자동 밝기 모드의 ON/OFF와 사용자가 지정한 목표값은 유지합니다.
+            if key not in ('auto_balance_enabled','auto_target_luma','auto_strength','auto_smoothing'):
+                var.set(values[key])
         self.update()
         self.status.set(f"자동 초기값 | 샘플 {stats['samples']}개 | L 중앙값 {stats['median']:.1f} | 밝은 포화 {stats['highlight_pct']:.1f}% | 어두운 포화 {stats['shadow_pct']:.1f}%")
     # 슬라이더 변경 시 즉시 RGB 전처리를 다시 실행합니다.
@@ -127,10 +137,12 @@ class Tuner:
             if entry is not None and self.master.focus_get()!=entry:entry.delete(0,'end');entry.insert(0,value)
         if self.original is None:return
         try:
-            self.processed=rgb_process(self.original,self.params())
+            self.auto_controller.reset()  # GUI 정지영상 미리보기는 슬라이더 즉시 반영
+            balanced=self.auto_controller.apply(self.original,self.params())
+            self.processed=rgb_process(balanced,self.params())
             self.render(self.original_label,self.original,'원본')
             self.render(self.processed_label,self.processed,'보정')
-            self.status.set(f'{pathlib.Path(self.path).name} | {self.original.shape[1]}x{self.original.shape[0]} | 설정값은 저장 버튼을 누를 때만 반영')
+            self.status.set(f'{pathlib.Path(self.path).name} | {self.original.shape[1]}x{self.original.shape[0]} | 자동 밝기: {self.auto_controller.last_stats.get("direction", "OFF")} | 설정 저장 시 다음 녹화부터 적용')
         except Exception as e:self.status.set(f'보정 오류: {e}')
     # OpenCV BGR 이미지를 Tkinter 화면에 맞춰 표시합니다.
     def render(self,label,image,title):
