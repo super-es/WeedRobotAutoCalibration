@@ -46,6 +46,7 @@ class Tuner:
         ttk.Button(top,text='이미지 열기',command=self.open_image).pack(side='left',padx=3)
         ttk.Button(top,text='영상 열기',command=self.open_video).pack(side='left',padx=3)
         ttk.Button(top,text='자동 초기값 산출',command=self.auto).pack(side='left',padx=3)
+        ttk.Button(top,text='계산값 → 수동 감마 적용',command=self.apply_snapshot).pack(side='left',padx=3)
         ttk.Button(top,text='보정 이미지 저장',command=self.save_image).pack(side='left',padx=3)
         ttk.Button(top,text='설정값 config.json 저장',command=self.save_config).pack(side='left',padx=3)
         ttk.Button(top,text='설정 초기화',command=self.reset).pack(side='left',padx=3)
@@ -60,6 +61,9 @@ class Tuner:
         self.scale(control,'auto_target_luma','목표 밝기(L)',80,175,1)
         self.scale(control,'auto_strength','자동 보정 강도',0.0,1.0,0.05)
         self.scale(control,'auto_smoothing','영상 변화 완충',0.0,0.995,0.005)
+        ttk.Label(control,text='[현재 영상의 자동 계산값]').pack(anchor='w',pady=(8,2))
+        self.auto_result=tk.StringVar(value='영상 입력 전 / 자동 분석 대기')
+        ttk.Label(control,textvariable=self.auto_result,justify='left',wraplength=330).pack(anchor='w',pady=(0,8))
         self.check(control,'white_balance','자동 화이트밸런스',False)
         self.check(control,'clahe','CLAHE 대비 보정',False)
         self.scale(control,'clahe_clip','CLAHE 강도',0.1,6.0,0.1)
@@ -148,10 +152,49 @@ class Tuner:
             self.auto_controller.reset()  # GUI 정지영상 미리보기는 슬라이더 즉시 반영
             balanced=self.auto_controller.apply(self.original,self.params())
             self.processed=rgb_process(balanced,self.params())
+            self.describe_auto()
             self.render(self.original_label,self.original,'원본')
             self.render(self.processed_label,self.processed,'보정')
             self.status.set(f'{pathlib.Path(self.path).name} | {self.original.shape[1]}x{self.original.shape[0]} | 자동 밝기: {self.auto_controller.last_stats.get("direction", "OFF")} | 설정 저장 시 다음 녹화부터 적용')
         except Exception as e:self.status.set(f'보정 오류: {e}')
+    # 현재 자동 밝기 알고리즘의 실제 계산값을 실시간으로 보여줍니다.
+    def describe_auto(self):
+        stats=self.auto_controller.last_stats
+        if not stats:
+            self.auto_result.set('자동 밝기 OFF — 적용 계수 없음')
+            return
+        exponent=float(stats['exponent'])
+        equivalent_gamma=1.0/max(exponent,0.01)
+        original=float(stats['p50'])
+        corrected=255*(original/255)**exponent
+        self.auto_result.set(
+            f"중앙 밝기: {original:.1f} → {corrected:.1f} (목표 {stats['target_luma']:.0f})\\n"
+            f"보정 방향: {stats['direction']} | 환산 감마: {equivalent_gamma:.3f}\\n"
+            f"실제 LUT 지수: {exponent:.3f} | 하이라이트 포화: {stats['highlight_clip_pct']:.2f}%\\n"
+            f"그림자 포화: {stats['shadow_clip_pct']:.2f}% | P10: {stats['p10']:.1f} / P90: {stats['p90']:.1f}\\n"
+            "※ 수동 노출/하이라이트 설정과 구분되는 자동 계수입니다."
+        )
+
+    # 자동 밝기 보정 결과를 한 장면의 고정 수동 감마 값으로 전환합니다.
+    # 이 작업은 자동 ON/OFF와 달리 영상 전체에 고정된 수치를 적용할 때 사용합니다.
+    def apply_snapshot(self):
+        if self.original is None:
+            messagebox.showinfo('안내','이미지 또는 영상을 먼저 열어주세요.')
+            return
+        if not self.variables['auto_balance_enabled'].get():
+            messagebox.showinfo('안내','자동 밝기 균형을 ON으로 설정하세요.')
+            return
+        self.auto_controller.reset()
+        self.auto_controller.apply(self.original,self.params())
+        stats=self.auto_controller.last_stats
+        if not stats:return
+        # processor.gamma는 밝기 LUT 지수의 역수입니다.
+        self.variables['gamma'].set(round(1.0/max(float(stats['exponent']),0.01),3))
+        # 자동 보정과 수동 감마를 중복 적용하지 않도록 자동 모드를 끕니다.
+        self.variables['auto_balance_enabled'].set(False)
+        self.update()
+        self.status.set('수동 감마 값에 자동 계산값을 적용했습니다. 중복 방지를 위해 자동 밝기를 OFF로 변경했습니다. 설정 저장을 눌러 확정하세요.')
+
     # OpenCV BGR 이미지를 Tkinter 화면에 맞춰 표시합니다.
     def render(self,label,image,title):
         from PIL import Image,ImageTk
@@ -170,6 +213,9 @@ class Tuner:
     def save_config(self):
         # 설정 파일을 저장해도 실행 중인 main.py에는 자동 반영되지 않습니다.
         self.config['processing']=self.params()
+        # 참고용 분석 결과: 고정 파라미터로 재적용하지 않습니다.
+        if self.auto_controller.last_stats:
+            self.config['processing']['auto_last_analysis']=dict(self.auto_controller.last_stats)
         try:
             self.config_path.write_text(json.dumps(self.config,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
             self.cfg=self.config['processing'];messagebox.showinfo('저장 완료','config.json에 보정값을 저장했습니다. 다음 녹화 실행부터 적용됩니다.')
