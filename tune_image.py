@@ -39,6 +39,7 @@ class Tuner:
         self.cfg=self.config.setdefault('processing',{})
         self.samples=[];self.original=None;self.processed=None;self.path=None
         self.auto_controller=AutoBrightness()
+        self.last_auto_stats={}
         master.title('Weed Robot - RGB 자동 밝기 균형 v3.4')
         master.geometry('1300x950')
         main=ttk.Frame(master,padding=12);main.pack(fill='both',expand=True)
@@ -160,6 +161,7 @@ class Tuner:
     # 현재 자동 밝기 알고리즘의 실제 계산값을 실시간으로 보여줍니다.
     def describe_auto(self):
         stats=self.auto_controller.last_stats
+        if stats:self.last_auto_stats=dict(stats)
         if not stats:
             self.auto_result.set('자동 밝기 OFF — 적용 계수 없음')
             return
@@ -188,6 +190,7 @@ class Tuner:
         self.auto_controller.apply(self.original,self.params())
         stats=self.auto_controller.last_stats
         if not stats:return
+        self.last_auto_stats=dict(stats)
         # processor.gamma는 밝기 LUT 지수의 역수입니다.
         self.variables['gamma'].set(round(1.0/max(float(stats['exponent']),0.01),3))
         # 자동 보정과 수동 감마를 중복 적용하지 않도록 자동 모드를 끕니다.
@@ -214,8 +217,8 @@ class Tuner:
         # 설정 파일을 저장해도 실행 중인 main.py에는 자동 반영되지 않습니다.
         self.config['processing']=self.params()
         # 참고용 분석 결과: 고정 파라미터로 재적용하지 않습니다.
-        if self.auto_controller.last_stats:
-            self.config['processing']['auto_last_analysis']=dict(self.auto_controller.last_stats)
+        if self.last_auto_stats:
+            self.config['processing']['auto_last_analysis']=dict(self.last_auto_stats)
         try:
             self.config_path.write_text(json.dumps(self.config,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
             self.cfg=self.config['processing'];messagebox.showinfo('저장 완료','config.json에 보정값을 저장했습니다. 다음 녹화 실행부터 적용됩니다.')
