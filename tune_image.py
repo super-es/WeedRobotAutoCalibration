@@ -123,12 +123,20 @@ class Tuner:
     def auto(self):
         if not self.samples:return
         values,stats=recommend(self.samples)
+        automatic = bool(self.variables['auto_balance_enabled'].get())
         for key,var in self.variables.items():
-            # 자동 밝기 모드의 ON/OFF와 사용자가 지정한 목표값은 유지합니다.
-            if key not in ('auto_balance_enabled','auto_target_luma','auto_strength','auto_smoothing'):
-                var.set(values[key])
+            # 영상 자동 밝기 ON이면 기존 수동 감마/하이라이트 추천을 중복 적용하지 않습니다.
+            # 사용자가 목표 밝기를 바꾸면 자동 보정 강도만 변경됩니다.
+            if key in ('auto_balance_enabled','auto_target_luma','auto_strength','auto_smoothing'):
+                continue
+            if automatic:
+                if key in ('enabled','nir_median','nir_normalize'):
+                    continue
+                var.set(DEFAULTS.get(key,values.get(key,var.get())))
+            else:
+                var.set(values.get(key,var.get()))
         self.update()
-        self.status.set(f"자동 초기값 | 샘플 {stats['samples']}개 | L 중앙값 {stats['median']:.1f} | 밝은 포화 {stats['highlight_pct']:.1f}% | 어두운 포화 {stats['shadow_pct']:.1f}%")
+        self.status.set(f"자동 분석 | 샘플 {stats['samples']}개 | L 중앙값 {stats['median']:.1f} | 밝은 포화 {stats['highlight_pct']:.1f}% | 어두운 포화 {stats['shadow_pct']:.1f}%")
     # 슬라이더 변경 시 즉시 RGB 전처리를 다시 실행합니다.
     def update(self):
         for key,label in self.labels.items():
