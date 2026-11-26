@@ -6,6 +6,7 @@ import argparse,datetime,json,logging,time,pathlib
 import cv2,numpy as np
 from store import Store,iso_now
 from processor import rgb_process,ir_process
+from auto_balance import AutoBrightness
 from api import Api
 from simulator import Simulator
 
@@ -27,6 +28,7 @@ def run():
     # IR 스트림은 카메라/설정에서 지원할 때만 추가합니다.
     if cam.get('infrared_enabled'):rc.enable_stream(rs.stream.infrared,int(cam.get('infrared_index',1)),dw,dh,rs.format.y8,df)
     profile=None;writers={};segment_start=None;segment_no=-1;last_image=-1e20
+    brightness_controller=AutoBrightness()  # 자동 밝기 상태는 녹화 세션 동안 유지
     try:
         # 카메라가 USB 대역폭 문제로 연결되지 않으면 이 지점에서 예외가 날 수 있습니다.
         profile=pipe.start(rc);scale=profile.get_device().first_depth_sensor().get_depth_scale()
@@ -40,7 +42,10 @@ def run():
             color=frames.get_color_frame();depth=frames.get_depth_frame()
             if not color or not depth:continue
             # RGB에는 보정을 적용하지만 raw Depth는 16비트 원본으로 유지합니다.
-            rgb=np.asanyarray(color.get_data());raw=np.asanyarray(depth.get_data());processed=rgb_process(rgb,cfg['processing'])
+            rgb=np.asanyarray(color.get_data());raw=np.asanyarray(depth.get_data())
+            # 자동 밝기 균형(기본 ON) 이후 기존 수동 RGB 보정을 적용합니다.
+            auto_rgb=brightness_controller.apply(rgb,cfg['processing'])
+            processed=rgb_process(auto_rgb,cfg['processing'])
             # Depth MP4용 컬러 영상은 시각화 이미지이며 실제 거리값이 아닙니다.
             vis=cv2.applyColorMap(cv2.convertScaleAbs(raw,alpha=0.03),cv2.COLORMAP_JET)
             # Align can change depth resolution to RGB resolution.
