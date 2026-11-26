@@ -3,7 +3,7 @@
 import cv2
 import numpy as np
 
-DEFAULTS=dict(enabled=True,white_balance=False,clahe=False,clahe_clip=1.5,brightness=0,contrast=1.,gamma=1.,saturation=1.,denoise=False,denoise_strength=5,sharpen=0.,exposure=0,highlights=0,shadows=0,whites=0,blacks=0)
+DEFAULTS=dict(auto_balance_enabled=True,auto_target_luma=128,auto_strength=0.8,auto_smoothing=0.9,enabled=True,white_balance=False,clahe=False,clahe_clip=1.5,brightness=0,contrast=1.,gamma=1.,saturation=1.,denoise=False,denoise_strength=5,sharpen=0.,exposure=0,highlights=0,shadows=0,whites=0,blacks=0)
 
 def analyze(image):
     # LAB L 채널: 색상과 밝기를 분리하여 식생 색상 변형을 줄입니다.
@@ -14,6 +14,7 @@ def analyze(image):
 def recommend(images):
     rows=np.array([analyze(x) for x in images]); p1,p10,p50,p90,p99,hi,lo=np.median(rows,axis=0)
     c=DEFAULTS.copy()
+    # 수동 보정값 자동 추천은 AutoBrightness의 실시간 분석과 별개 기능입니다.
     # 중앙 밝기 목표 128, 감마 제한으로 과보정 방지.
     c['gamma']=round(float(np.clip(np.log(np.clip(p50/255,.02,.98))/np.log(128/255),.8,1.35)),2)
     c['highlights']=int(np.clip(-(p90-205)*1.2,-35,0))
