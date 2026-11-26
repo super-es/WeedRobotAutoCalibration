@@ -1,7 +1,15 @@
 {
   "camera": {
-    "color": [640, 480, 30],
-    "depth": [640, 480, 30],
+    "color": [
+      640,
+      480,
+      30
+    ],
+    "depth": [
+      640,
+      480,
+      30
+    ],
     "infrared_enabled": false,
     "infrared_index": 1,
     "align_depth_to_color": true,
@@ -18,24 +26,44 @@
     "white_balance": false,
     "clahe": false,
     "clahe_clip": 1.5,
-    "gamma": 1.0,
+    "gamma": 1,
     "denoise": false,
     "nir_median": 3,
     "nir_normalize": true,
     "enabled": true,
     "brightness": 0,
-    "contrast": 1.0,
-    "saturation": 1.0,
+    "contrast": 1,
+    "saturation": 1,
     "denoise_strength": 5,
-    "sharpen": 0.0,
-    "exposure": 0.0,
+    "sharpen": 0,
+    "exposure": 0,
     "highlights": 0,
     "shadows": 0,
     "whites": 0,
-    "blacks": 0
+    "blacks": 0,
+    "auto_balance_enabled": true,
+    "auto_target_luma": 128,
+    "auto_strength": 0.8,
+    "auto_smoothing": 0.9
   },
-  "api": {"host": "127.0.0.1", "port": 8765, "token": ""},
-  "simulation": {"enabled": true, "interval_seconds": 5, "seed": 42},
-  "grid": {"rows": 1, "cols": 24, "nozzles": 24, "index_base": 1},
-  "export": {"copy_to_usb_manually": true, "verify_before_delete": true}
+  "api": {
+    "host": "127.0.0.1",
+    "port": 8765,
+    "token": ""
+  },
+  "simulation": {
+    "enabled": true,
+    "interval_seconds": 5,
+    "seed": 42
+  },
+  "grid": {
+    "rows": 1,
+    "cols": 24,
+    "nozzles": 24,
+    "index_base": 1
+  },
+  "export": {
+    "copy_to_usb_manually": true,
+    "verify_before_delete": true
+  }
 }
