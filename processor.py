@@ -9,6 +9,14 @@ import numpy as np
 def rgb_process(image, cfg):
     x=image.copy()
     if not cfg.get('enabled', True): return x
+    # 자동 보정이 ON이면 숫자 입력란에 표시된 자동 추천값은 중복 적용하지 않습니다.
+    # 사용자가 직접 수정한 항목은 GUI가 auto_derived_values에서 제거하여 적용합니다.
+    if cfg.get('auto_balance_enabled',False):
+        derived=cfg.get('auto_derived_values',{})
+        if isinstance(derived,dict) and derived:
+            neutral={'gamma':1.,'highlights':0,'shadows':0,'whites':0,'blacks':0}
+            cfg={**cfg,**{key:neutral[key] for key in derived if key in neutral}}
+
     # 노출 및 영역별 밝기 보정: LAB 휘도에 부드러운 가중치 적용.
     keys=('exposure','highlights','shadows','whites','blacks')
     if any(float(cfg.get(k,0)) for k in keys):
