@@ -49,12 +49,8 @@ class Tuner:
         top=ttk.Frame(main);top.pack(fill='x')
         ttk.Button(top,text='이미지 열기',command=self.open_image).pack(side='left',padx=3)
         ttk.Button(top,text='영상 열기',command=self.open_video).pack(side='left',padx=3)
-        ttk.Button(top,text='자동 초기값 산출',command=self.auto).pack(side='left',padx=3)
-        ttk.Button(top,text='자동 수치 적용',command=self.auto).pack(side='left',padx=3)
         ttk.Button(top,text='보정 이미지 저장',command=self.save_image).pack(side='left',padx=3)
         ttk.Button(top,text='설정값 config.json 저장',command=self.save_config).pack(side='left',padx=3)
-        ttk.Button(top,text='설정 초기화',command=self.reset).pack(side='left',padx=3)
-        ttk.Button(top,text='원본 ↔ 보정 비교/변경내역',command=self.show_changes).pack(side='left',padx=3)
         ttk.Label(top,text='원본 이미지 → 보정 이미지 비교 / 수치 변경 시 자동 반영').pack(side='right')
         pane=ttk.Panedwindow(main,orient='horizontal');pane.pack(fill='both',expand=True,pady=12)
         controls_outer=ttk.Frame(pane,padding=4);pane.add(controls_outer,weight=1)
@@ -77,6 +73,11 @@ class Tuner:
         self.bind_scroll=bind_wheel
         display=ttk.Frame(pane,padding=8);pane.add(display,weight=3)
         self.variables={};self.labels={};self.entries={}
+        # 핵심 명령은 스크롤 컨트롤 상단에 두어 좁은 창에서도 버튼이 잘리지 않게 합니다.
+        actions=ttk.Frame(control);actions.pack(fill='x',pady=(0,10))
+        ttk.Button(actions,text='자동 수치 계산·적용',command=self.auto).pack(fill='x',pady=2)
+        ttk.Button(actions,text='원본 ↔ 보정 비교/변경내역',command=self.show_changes).pack(fill='x',pady=2)
+        ttk.Button(actions,text='설정 초기화',command=self.reset).pack(fill='x',pady=2)
         self.check(control,'enabled','수동 전처리 적용',True)
         # 자동 밝기 균형: 기본 ON / OFF 버튼. 수동 전처리와 독립적으로 동작합니다.
         self.check(control,'auto_balance_enabled','자동 밝기 균형 ON/OFF',True)
@@ -126,7 +127,9 @@ class Tuner:
         tk.Scale(parent,from_=lo,to=hi,resolution=step,orient='horizontal',showvalue=False,variable=var,command=lambda v,k=key:self.changed(k)).pack(fill='x')
     def changed(self,key):
         if not self.setting_vars and key in self.auto_derived:
-            self.auto_derived.pop(key,None)  # 사용자가 만진 값은 자동 추천에서 수동 설정으로 전환
+            # Scale.set()에 의해 늦게 도착한 자동 갱신 콜백은 자동값을 유지합니다.
+            if abs(float(self.variables[key].get())-float(self.auto_derived[key]))>0.002:
+                self.auto_derived.pop(key,None)  # 사용자가 수정한 항목만 수동 처리
         self.update()
 
     def toggle_auto(self):
